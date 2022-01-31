@@ -1,30 +1,17 @@
 from Theory import *
 import pygame.midi
-import time, threading
+import time, math
 
 
 class Player:
-    def __init__(self, pitch_focus_range=[48, 60]):
+    def __init__(self, ):
         pygame.midi.init()
         self.player = pygame.midi.Output(0)
-        self.pitch_focus_range = pitch_focus_range
         self.context = context
         self.speed = 1.7
 
     def extend_context(self, c):
         self.context = {**self.context, **c}
-
-    def filter_sound(self, sound):
-        # Keep pitches around a pitch range (not strict limit)
-        _s = []
-        for s in sound:
-            if s < self.pitch_focus_range[0]:
-                _s.append(s+12)
-            elif s > self.pitch_focus_range[1]:
-                _s.append(s-12)
-            else:
-                _s.append(s)
-        return _s
 
     def play_note(self, note, duration):
         self.play_chord([note], duration)
@@ -62,13 +49,12 @@ class Player:
         self.play_progression(prog)
 
     def play_style1(self, c):
-        print("play_style1")
         self.play_instrument(Instruments.PIANO, [
             ([_c - 12 for _c in c[:-1]], 3*self.speed),
         ])
         self.play_instrument(Instruments.STRINGS, [
             (c[1:], 3*self.speed),
-            ([c[0] - 12, c[-1]], 3*self.speed),
+            ([c[0] - 12], 3*self.speed),
             (c, 9*self.speed),
         ])
         self.play_instrument(Instruments.PIANO, [
@@ -77,19 +63,17 @@ class Player:
         ])
 
     def play_style2(self, c):
-        print("play_style2")
         self.play_instrument(Instruments.PIANO, [
             ([_c - 12 for _c in c[:-1]], 3 * self.speed),
 
         ])
         self.play_instrument(Instruments.STRINGS, [
             ([c[0]-12, c[-1]], 3 * self.speed),
-            ([_c-12 for _c in c[1:]], 3 * self.speed),
-            (c, 3 * self.speed),
+            (c[0], 3 * self.speed),
+            ([_c for _c in c], 3 * self.speed),
         ])
 
     def play_style3(self, c):
-        print("play_style3")
         self.play_instrument(Instruments.PIANO, [
             (c[1] - 24, 3*self.speed),
             (c, 3*self.speed),
@@ -98,7 +82,6 @@ class Player:
         ])
 
     def play_style4(self, c):
-        print("play_style4")
         self.play_instrument(Instruments.STRINGS, [
             (c[1:], 3 * self.speed),
         ])
@@ -113,27 +96,42 @@ class Player:
             (c[1:], 3 * self.speed),
         ])
 
+    def invert_chord(self, c, direction=1):
+        direction = int(direction)
+        _c = c[min(0, direction)]
+        c.remove(_c)
+        new_p = [_c + direction * 12]
+        r = (c + new_p) if direction == 1 else (new_p + c)
+        return r
+
     def modulate_to_pitch(self, c, p):
-        s = sum(c)
-        print('')
+        c = [_c+c3 for _c in c]
+        s = sum(c)/len(c)
+        while s < p - 2 or s > p + 2:
+            dir = (p-s)/abs(p-s)
+            c = self.invert_chord(c, dir)
+            s = sum(c)/len(c)
+
+        return c
 
 
-    def play_piece(self, prog, invert_chords=True, log=True):
+    def play_piece(self, prog, pitch_center_options, log=True):
         prog_names = [c.name for c in prog]
 
-        print(f"Chord progression: {prog_names}\n")
+        print(f"Chord progression: {prog_names}")
         styles = [self.play_style1, self.play_style2, self.play_style3, self.play_style4]
-        for i, c in enumerate(sng):
+
+        for i, c in enumerate(prog):
             chord_name = prog_names[i]
             p = prog[i]
             notes = ', '.join(p.notes)
+            tone = random.choice(pitch_center_options)
+            c = self.modulate_to_pitch(c.semitones, tone)
 
             if log:
-                print(f'{chord_name}: {notes}', f'| inv {p.inversion}' if invert_chords else None)
-            random.shuffle(c)
-            # c = self.filter_sound(c)
-            # self.play_style1(c)
-            c = self.modulate_to_pitch(c, c3)
+                print(f'{chord_name}: {notes}')
+            # random.shuffle(c)
+
             styles[self.play_count % len(styles)](c)
             self.play_count += 1
 
@@ -141,6 +139,7 @@ class Player:
         # Plays each piece in a certain scale
         self.play_count = 0
 
+        tones=[c3 + 6 * (.5 + .5 * math.sin(i*3.14/len(scales))) for i in range(2*len(scales)-1)]
         if song is None:
             song = ['1'] * len(scales)
         for i, k in enumerate(scales):
@@ -152,8 +151,8 @@ class Player:
                 print(f"Chords: {scl.scale_chords}\n")
             scl.set_expression(s)
             c_prog = scl.get_chord_progression()
-
-            self.play_piece(c_prog, log=log)
+            tone_seg = tones[max(0, i-2):min(len(tones), i+3)]
+            self.play_piece(c_prog, pitch_center_options=tone_seg, log=log)
 
     def close(self):
         del self.player

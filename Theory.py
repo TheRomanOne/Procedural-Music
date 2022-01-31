@@ -3,26 +3,21 @@ from Music import *
 
 class Note:
 
-    def __init__(self, note, octave=None):
-        octave = c3_octave if octave is None else octave
+    def __init__(self, note):
         self.name = note
         self.index = keys.index(note)
-        self.midi = (octave - c3_octave) * 12 + c3 + self.index
 
 
     def get_type(self, t):
         return [c + self.index for c in triad_types[t]]
 
 class Chord:
-    def __init__(self, notes, invert=0, octave=None):
-        octave = c3_octave if octave is None else octave
+    def __init__(self, notes):
         self.notes = notes
         ln = len(notes)
-        ns = [Note(n, octave) for n in notes]
-        midi = [n.midi for n in ns]
-        self.midi = []
-        for i in range(ln):
-            self.midi.append(midi[(i + invert) % ln])
+        ns = [Note(n) for n in notes]
+        self.semitones = [n.index for n in ns]
+
         self.normalize_pitch()
         intervals = [(ns[i + 1].index - ns[i].index) % len(keys) for i in range(ln - 1)]
 
@@ -32,23 +27,21 @@ class Chord:
         self.root = ns[0].name
         self.name = self.root + self.type
         self.chord_notes = ns
-        self.inversion = invert
 
     def find_similar(self, c):
         return list(set(self.notes).intersection(c.notes))
 
     def normalize_pitch(self):
-        for i, m in enumerate(self.midi):
+        for i, m in enumerate(self.semitones):
             if i > 0:
-                if self.midi[i-1] > m:
-                    self.midi[i] += 12
+                if self.semitones[i-1] > m:
+                    self.semitones[i] += 12
 
     def invert(self, i):
         pass
 
 class Scale:
     def __init__(self, scale, octave=None, context=None, sevens=[]):
-        self.octave = c3_octave if octave is None else octave
         self.context = context
         self.root = scale
         self.scale_type = 'M'
@@ -141,7 +134,7 @@ class Scale:
 
         if t == '7': # Add a seventh to the chord
             chord.append(sn[(i + 6) % len(sn)])
-        return Chord(chord, 0, self.octave)
+        return Chord(chord)
 
     def buils_tonal_chords(self, sevens=[]):
         '''
@@ -163,16 +156,7 @@ class Scale:
 
     def set_expression(self, song):
         self.chord_progression = []
-        self.chord_progression_midi = []
         self.parse_expression(song)
-
-        # for i, c in enumerate(self.chord_progression):
-        #     if i > 0:
-        #         prev = self.chord_progression[i-1]
-        #         sim = prev.find_similar(c)
-        #
-        #
-        #         print(prev.name, "<-->", c.name, f': {sim}')
 
 
     def parse_expression(self, s, tab=''):
@@ -182,19 +166,15 @@ class Scale:
         _s = self._choose(_s)
         for n in _s:
             if n == '_':
-                # self.chord_progression.append(n)
                 continue
             if n.isnumeric():
                 c = self.chords[int(n)-1]
-                self.chord_progression_midi.append(c.midi)
                 self.chord_progression.append(c)
             else:
                 state = self.context[n]
-                # print(f"{tab}State {n}: {state}")
                 self.parse_expression(state, tab + '---')
 
     def get_chord_progression(self): return self.chord_progression
 
-    def get_midi(self): return self.chord_progression_midi
 
     def get_chord_names(self): return [c.name for c in self.chord_progression]
